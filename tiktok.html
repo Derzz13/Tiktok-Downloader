@@ -1,0 +1,212 @@
+<!--
+Single-file TikTok downloader UI (HTML + CSS + JS)
+Notes:
+- This is a frontend-only mockup. To actually download TikTok videos/audio you need a backend service that fetches TikTok media and returns a downloadable file (server must handle CORS, rate limits, and TikTok policies).
+- Replace /api/download in the JS with your real backend endpoint.
+- The UI supports selecting MP3, MP4, MP4 HD and shows a progress bar and preview.
+-->
+
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>TikTok Downloader — MP3 / MP4 / MP4 HD</title>
+  <style>
+    :root{
+      --bg:#0f1724; --card:#0b1220; --accent:#7c3aed; --muted:#94a3b8; --glass: rgba(255,255,255,0.04);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;color:#e6eef8;background:linear-gradient(180deg,#071029 0%,#081226 60%);}
+    .wrap{min-height:100%;display:flex;align-items:center;justify-content:center;padding:40px}
+    .card{width:100%;max-width:880px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:16px;padding:26px;box-shadow:0 6px 30px rgba(2,6,23,0.6);border:1px solid rgba(255,255,255,0.03)}
+
+    .header{display:flex;align-items:center;gap:16px}
+    .logo{width:56px;height:56px;border-radius:10px;display:grid;place-items:center;background:linear-gradient(135deg,var(--accent), #06b6d4);color:white;font-weight:700;font-size:18px}
+    h1{margin:0;font-size:20px}
+    p.lead{margin:4px 0 0;color:var(--muted);font-size:13px}
+
+    form{margin-top:18px;display:grid;grid-template-columns:1fr 240px;gap:14px}
+    .input{display:flex;align-items:center;background:var(--glass);padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.02)}
+    .input input{border:0;background:transparent;outline:none;color:inherit;font-size:14px;width:100%}
+    .btn-primary{background:var(--accent);color:white;border-radius:10px;padding:10px 14px;border:0;font-weight:600;cursor:pointer}
+    .btn-primary:active{transform:translateY(1px)}
+
+    .formats{display:flex;gap:8px;margin-top:12px}
+    .format-btn{padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:var(--muted);cursor:pointer;font-weight:600}
+    .format-btn.active{background:rgba(124,58,237,0.12);color:var(--accent);border-color:rgba(124,58,237,0.28)}
+
+    .foot{display:flex;gap:14px;align-items:center;justify-content:space-between;margin-top:16px}
+    .small{font-size:12px;color:var(--muted)}
+
+    .result{margin-top:18px;padding:14px;border-radius:12px;background:linear-gradient(180deg, rgba(255,255,255,0.01), transparent);border:1px solid rgba(255,255,255,0.02)}
+    .preview{display:flex;gap:12px;align-items:center}
+    .thumb{width:96px;height:56px;background:#0b1220;border-radius:8px;display:grid;place-items:center;color:var(--muted);font-size:12px}
+    .meta{flex:1}
+    .meta h3{margin:0;font-size:15px}
+    .meta p{margin:6px 0 0;color:var(--muted);font-size:13px}
+
+    .progress{height:8px;background:rgba(255,255,255,0.03);border-radius:6px;margin-top:10px;overflow:hidden}
+    .progress > i{display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--accent),#06b6d4);transition:width 300ms ease}
+
+    .actions{display:flex;gap:8px;margin-top:12px}
+    .btn-ghost{padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:var(--muted);cursor:pointer}
+
+    /* responsive */
+    @media(max-width:720px){form{grid-template-columns:1fr;}.logo{width:48px;height:48px}.thumb{width:80px;height:56px}}
+
+    /* subtle animations */
+    .fade-in{animation:fadeIn .4s ease both}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="header">
+        <div class="logo">TT</div>
+        <div>
+          <h1>TikTok Downloader</h1>
+          <p class="lead">Pilih format lalu tempelkan link TikTok. (Frontend mockup — butuh backend untuk bekerja)</p>
+        </div>
+      </div>
+
+      <form id="dlForm" onsubmit="return false;">
+        <div class="input">
+          <input id="urlInput" placeholder="Tempel link TikTok (mis. https://www.tiktok.com/@user/video/123...)" aria-label="TikTok URL" />
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <button id="startBtn" class="btn-primary" type="submit">Download</button>
+          <div class="small" style="text-align:center;color:var(--muted)">Ekstensi: MP3 / MP4</div>
+        </div>
+      </form>
+
+      <div class="formats" role="tablist" aria-label="Pilih format">
+        <button class="format-btn active" data-format="mp4">MP4</button>
+        <button class="format-btn" data-format="mp4hd">MP4 HD</button>
+        <button class="format-btn" data-format="mp3">MP3 (Audio)</button>
+      </div>
+
+      <div class="result" id="resultArea" hidden>
+        <div class="preview">
+          <div class="thumb" id="thumb">Preview</div>
+          <div class="meta">
+            <h3 id="title">—</h3>
+            <p id="details">Format: <span id="fmt">MP4</span> • Size: <span id="size">—</span></p>
+            <div class="progress" aria-hidden="true"><i id="progressBar"></i></div>
+            <div class="actions">
+              <a id="downloadLink" class="btn-primary" href="#" download>Download</a>
+              <button id="cancelBtn" class="btn-ghost">Batal</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="foot">
+        <div class="small">Perhatian: penggunaan harus sesuai ketentuan TikTok dan hukum setempat.</div>
+        <div class="small">Frontend v1.0</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // UI logic
+    const formatBtns = document.querySelectorAll('.format-btn');
+    let selectedFormat = 'mp4';
+    formatBtns.forEach(b=>b.addEventListener('click',()=>{
+      formatBtns.forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      selectedFormat = b.dataset.format;
+      document.getElementById('fmt').innerText = b.innerText;
+    }));
+
+    const startBtn = document.getElementById('startBtn');
+    const urlInput = document.getElementById('urlInput');
+    const resultArea = document.getElementById('resultArea');
+    const progressBar = document.getElementById('progressBar');
+    const titleEl = document.getElementById('title');
+    const detailsEl = document.getElementById('details');
+    const thumbEl = document.getElementById('thumb');
+    const downloadLink = document.getElementById('downloadLink');
+    const cancelBtn = document.getElementById('cancelBtn');
+
+    let controller = null; // for aborting
+
+    startBtn.addEventListener('click', async ()=>{
+      const url = urlInput.value.trim();
+      if(!url){ alert('Masukkan link TikTok dulu.'); urlInput.focus(); return; }
+
+      // simple validation
+      if(!url.includes('tiktok.com')){ if(!confirm('Link tidak mengandung "tiktok.com". Lanjut?')) return; }
+
+      // show result area
+      resultArea.hidden = false;
+      titleEl.innerText = 'Mempersiapkan...';
+      thumbEl.innerText = 'Memuat...';
+      progressBar.style.width = '0%';
+      downloadLink.removeAttribute('href');
+
+      // create abort controller
+      controller = new AbortController();
+
+      try{
+        // Mock: call backend endpoint that returns metadata + a direct download URL
+        // Replace `/api/download` with your backend. Backend should accept: url and format
+        const endpoint = `http://localhost:3000/api/download?url=${encodeURIComponent(url)}&format=${encodeURIComponent(selectedFormat)}`;
+
+        // show fake progress while waiting (better UX)
+        await fakeProgressTo(35);
+
+        const resp = await fetch(endpoint, {signal: controller.signal});
+        if(!resp.ok) throw new Error('Server error: '+resp.status);
+
+        // expected response JSON: { title, thumbnail, size, downloadUrl }
+        const data = await resp.json();
+
+        titleEl.innerText = data.title || 'TikTok Media';
+        thumbEl.innerHTML = data.thumbnail ? `<img src="${data.thumbnail}" alt="thumb" style="width:100%;height:100%;object-fit:cover;border-radius:6px"/>` : '—';
+        document.getElementById('size').innerText = data.size || 'Unknown';
+        downloadLink.href = data.downloadUrl || '#';
+        // set filename suggestion
+        const ext = selectedFormat === 'mp3' ? 'mp3' : 'mp4';
+        downloadLink.setAttribute('download', (data.title || 'tiktok') + '.' + ext);
+
+        // finish progress
+        await fakeProgressTo(100);
+
+      }catch(err){
+        if(err.name === 'AbortError'){
+          titleEl.innerText = 'Dibatalkan';
+        }else{
+          titleEl.innerText = 'Terjadi kesalahan: '+err.message;
+          thumbEl.innerText = 'Error';
+          progressBar.style.width = '0%';
+        }
+      }
+    });
+
+    cancelBtn.addEventListener('click', ()=>{
+      if(controller) controller.abort();
+      resultArea.hidden = true;
+    });
+
+    // small helper to animate progress to a target percent
+    function fakeProgressTo(target){
+      return new Promise(res=>{
+        const step = () =>{
+          const cur = parseFloat(progressBar.style.width) || 0;
+          if(cur >= target){ res(); return; }
+          const inc = Math.max(1, (target - cur) / 8);
+          progressBar.style.width = Math.min(100, cur + inc) + '%';
+          setTimeout(step, 180 + Math.random()*120);
+        };
+        step();
+      });
+    }
+
+    // Optional: allow pressing Enter to start
+    urlInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter'){ e.preventDefault(); startBtn.click(); } });
+
+  </script>
+</body>
+</html>
